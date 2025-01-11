@@ -1,142 +1,146 @@
 import pandas as pd
 import streamlit as st
-from typing import List, Dict
-from trulens_eval import Feedback
-from snowflake.cortex import Complete
-from trulens.connectors.snowflake import SnowflakeConnector
-from src.utils import get_snowpark_session
+from typing import Dict, List
+
 from trulens.core import TruSession
+from trulens.connectors.snowflake import SnowflakeConnector
+from trulens.providers.cortex.provider import Cortex
+from trulens.core import Feedback
+from trulens.core import Select
+from snowflake.snowpark.context import get_active_session
 
 
 class TruLensEvaluator:
     def __init__(self):
-        # Initialize TruLens
-        tru_snowflake_connector = SnowflakeConnector(
-            snowpark_session=get_snowpark_session()
+        # Initialize Snowflake session
+        self.session = get_active_session()
+
+        # Setup TruLens with Snowflake
+        self.connector = SnowflakeConnector(snowpark_session=self.session)
+        self.tru = TruSession(connector=self.connector)
+
+        # Initialize Cortex provider
+        self.provider = Cortex(snowpark_session=self.session, model_engine="mistral-large2")
+
+    def get_feedback_functions(self) -> List[Feedback]:
+        """Get feedback functions for evaluation"""
+        # Groundedness feedback
+        f_groundedness = (
+            Feedback(
+                self.provider.groundedness_measure_with_cot_reasons,
+                name="Groundedness"
+            )
+            .on(Select.RecordCalls.retrieve_context.rets[:].collect())
+            .on_output()
         )
-        self.tru = TruSession(connector=tru_snowflake_connector)
 
-        # Define feedback functions
-        self.feedback_functions = [
+        # Context relevance feedback
+        f_context_relevance = (
             Feedback(
-                self.context_relevance, name="Context Relevance", higher_is_better=True
-            ),
+                self.provider.context_relevance,
+                name="Context Relevance"
+            )
+            .on(Select.RecordCalls.retrieve_context.rets[:].collect())
+            .on_output()
+        )
+
+        # Answer relevance feedback
+        f_answer_relevance = (
             Feedback(
-                self.response_relevance,
-                name="Response Relevance",
-                higher_is_better=True,
-            ),
-            Feedback(
-                self.completion_quality,
-                name="Completion Quality",
-                higher_is_better=True,
-            ),
-        ]
+                self.provider.answer_relevance,
+                name="Answer Relevance"
+            )
+            .on_input()
+            .on_output()
+        )
 
-        # Initialize metrics storage
-        if "metrics_history" not in st.session_state:
-            st.session_state.metrics_history = []
-
-    def context_relevance(self, query: str, context: List[str]) -> float:
-        """Evaluate relevance of retrieved context to the query."""
-        prompt = f"""
-        Query: {query}
-        Context: {' '.join(context)}
-
-        On a scale from 0 to 1, how relevant is the context to answering the query?
-        Provide only the numerical score.
-        """
-
-        try:
-            response = Complete("mistral-large2", prompt)
-            score = float(response.strip())
-            return min(max(score, 0), 1)
-        except:
-            return 0.0
-
-    def response_relevance(self, query: str, response: str) -> float:
-        """Evaluate relevance of the response to the query."""
-        prompt = f"""
-        Query: {query}
-        Response: {response}
-
-        On a scale from 0 to 1, how relevant and accurate is the response to the query?
-        Provide only the numerical score.
-        """
-
-        try:
-            score_response = Complete("mistral-large2", prompt)
-            score = float(score_response.strip())
-            return min(max(score, 0), 1)
-        except:
-            return 0.0
-
-    def completion_quality(self, query: str, response: str) -> float:
-        """Evaluate the overall quality of the completion."""
-        prompt = f"""
-        Query: {query}
-        Response: {response}
-
-        On a scale from 0 to 1, evaluate the quality of this response based on:
-        - Clarity and coherence
-        - Completeness of the answer
-        - Professional tone
-        - Factual accuracy (if verifiable from the response)
-
-        Provide only the numerical score.
-        """
-
-        try:
-            score_response = Complete("mistral-large2", prompt)
-            score = float(score_response.strip())
-            return min(max(score, 0), 1)
-        except:
-            return 0.0
-
-    def log_feedback(
-        self, query: str, context: List[str], response: str, metadata: Dict = None
-    ):
-        """Log feedback for a single interaction"""
-        if metadata is None:
-            metadata = {}
-
-        # Calculate feedback scores
-        if context and response:
-            context_rel = self.context_relevance(query, context)
-            response_rel = self.response_relevance(query, response)
-            completion_qual = self.completion_quality(query, response)
-
-            # Store metrics
-            metrics = {
-                "timestamp": pd.Timestamp.now().isoformat(),
-                "context_relevance": float(context_rel),
-                "response_relevance": float(response_rel),
-                "completion_quality": float(completion_qual),
-            }
-
-            metadata.update({"query": query, "context": context, "response": response})
-
-            metrics["metadata"] = metadata
-            st.session_state.metrics_history.append(metrics)
+        return [f_groundedness, f_context_relevance, f_answer_relevance]
 
     def get_metrics(self) -> Dict:
-        """Get evaluation metrics"""
-        if not st.session_state.metrics_history:
-            return {
-                "context_relevance": 0.0,
-                "response_relevance": 0.0,
-                "completion_quality": 0.0,
+        """Get evaluation metrics from TruLens"""
+        try:
+            # Get leaderboard data
+            leaderboard = self.tru.get_leaderboard()
+
+            if leaderboard.empty:
+                return {
+                    "groundedness": 0.0,
+                    "context_relevance": 0.0,
+                    "answer_relevance": 0.0
+                }
+
+            # Calculate metrics
+            metrics = {
+                "groundedness": leaderboard["Groundedness"].mean(),
+                "context_relevance": leaderboard["Context Relevance"].mean(),
+                "answer_relevance": leaderboard["Answer Relevance"].mean()
             }
 
-        df = pd.DataFrame(
-            [
-                {k: v for k, v in m.items() if k != "metadata"}
-                for m in st.session_state.metrics_history
-            ]
-        )
+            return metrics
 
-        return {
-            "context_relevance": float(df["context_relevance"].mean()),
-            "response_relevance": float(df["response_relevance"].mean()),
-            "completion_quality": float(df["completion_quality"].mean()),
-        }
+        except Exception as e:
+            st.error(f"Error getting metrics: {str(e)}")
+            return {
+                "groundedness": 0.0,
+                "context_relevance": 0.0,
+                "answer_relevance": 0.0
+            }
+
+    def get_detailed_metrics(self) -> pd.DataFrame:
+        """Get detailed metrics for dashboard"""
+        try:
+            # Get full records
+            records = self.tru.get_records()
+
+            if not records:
+                return pd.DataFrame()
+
+            # Transform records into DataFrame with timestamps
+            metrics_data = []
+            for record in records:
+                metric_entry = {
+                    "timestamp": record.timestamp,
+                    "query": record.input,
+                    "response": record.output
+                }
+
+                # Add feedback scores
+                for feedback in record.feedback_results:
+                    metric_entry[feedback.name] = feedback.score
+
+                metrics_data.append(metric_entry)
+
+            return pd.DataFrame(metrics_data)
+
+        except Exception as e:
+            st.error(f"Error getting detailed metrics: {str(e)}")
+            return pd.DataFrame()
+
+    def analyze_performance(self) -> Dict:
+        """Analyze RAG performance trends"""
+        metrics_df = self.get_detailed_metrics()
+
+        if metrics_df.empty:
+            return {}
+
+        # Get overall stats
+        stats = {}
+        for metric in ["Groundedness", "Context Relevance", "Answer Relevance"]:
+            if metric in metrics_df.columns:
+                stats[metric.lower().replace(" ", "_")] = {
+                    "average": metrics_df[metric].mean(),
+                    "std": metrics_df[metric].std(),
+                    "min": metrics_df[metric].min(),
+                    "max": metrics_df[metric].max(),
+                    "recent_trend": metrics_df[metric].tail(10).mean()
+                }
+
+        # Add query analysis
+        if "query" in metrics_df.columns:
+            stats["queries"] = {
+                "total": len(metrics_df),
+                "unique": metrics_df["query"].nunique(),
+                "avg_length": metrics_df["query"].str.len().mean()
+            }
+
+        return stats

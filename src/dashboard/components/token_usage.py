@@ -1,52 +1,92 @@
 """
 Token usage component for the evaluation dashboard.
-Handles the display of token usage metrics and trends.
+Handles tracking and visualization of token usage through TruLens.
 """
 
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from typing import Dict
-from ..visualizations import create_token_usage_trend
 
+def create_token_trend(df: pd.DataFrame) -> go.Figure:
+    """Create token usage trend visualization"""
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Add total tokens line
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=df['total_tokens'],
+            name="Total Tokens",
+            line=dict(color="rgb(75, 192, 192)")
+        ),
+        secondary_y=False
+    )
+
+    # Add token cost line
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=df['estimated_cost'],
+            name="Cost ($)",
+            line=dict(color="rgb(255, 159, 64)")
+        ),
+        secondary_y=True
+    )
+
+    fig.update_layout(
+        title="Token Usage and Cost Over Time",
+        xaxis_title="Time",
+        yaxis_title="Token Count",
+        yaxis2_title="Cost ($)"
+    )
+
+    return fig
 
 def display_token_metrics(token_df: pd.DataFrame):
     """
-    Display the token usage metrics section.
+    Display token usage metrics with TruLens integration.
 
     Args:
-        token_df: DataFrame containing token usage data
+        token_df: DataFrame containing token usage data from TruLens
     """
     if token_df.empty:
         st.info("No token usage data available yet. Start chatting to generate data!")
         return
 
-    # Summary metrics
-    st.subheader("🔤 Token Usage Summary")
+    st.subheader("🔤 Token Usage Analysis")
 
+    # Calculate token usage metrics
     total_tokens = token_df['total_tokens'].sum()
-    total_cost = (token_df['prompt_tokens'].sum() * 0.7 +
-                  token_df['completion_tokens'].sum() * 2.0) / 1000  # Cost per 1K tokens
+    prompt_tokens = token_df['prompt_tokens'].sum() if 'prompt_tokens' in token_df.columns else 0
+    completion_tokens = token_df['completion_tokens'].sum() if 'completion_tokens' in token_df.columns else 0
 
+    # Calculate costs (based on Mistral's pricing)
+    prompt_cost = (prompt_tokens / 1000) * 0.7  # $0.7 per 1K tokens for input
+    completion_cost = (completion_tokens / 1000) * 2.0  # $2.0 per 1K tokens for output
+    total_cost = prompt_cost + completion_cost
+
+    # Display summary metrics
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
             "Total Tokens",
             f"{total_tokens:,}",
-            help="Total number of tokens used (prompts + completions)"
+            help="Total tokens used across all interactions"
         )
 
     with col2:
-        avg_per_query = token_df['total_tokens'].mean()
+        avg_tokens = total_tokens / len(token_df) if len(token_df) > 0 else 0
         st.metric(
             "Avg Tokens/Query",
-            f"{avg_per_query:.0f}",
-            help="Average number of tokens used per query"
+            f"{avg_tokens:.0f}",
+            help="Average tokens per interaction"
         )
 
     with col3:
-        completion_ratio = (token_df['completion_tokens'].sum() /
-                            total_tokens * 100)
+        completion_ratio = completion_tokens / total_tokens * 100 if total_tokens > 0 else 0
         st.metric(
             "Completion Ratio",
             f"{completion_ratio:.1f}%",
@@ -55,84 +95,47 @@ def display_token_metrics(token_df: pd.DataFrame):
 
     with col4:
         st.metric(
-            "Estimated Cost",
+            "Total Cost",
             f"${total_cost:.2f}",
-            help="Estimated cost based on current token pricing"
+            help="Total cost based on Mistral's pricing"
         )
 
-    # Usage Trends
+    # Token Usage Trends
     with st.expander("📈 Usage Trends", expanded=True):
-        st.markdown("### Token Usage Over Time")
-        trend_fig = create_token_usage_trend(token_df)
-        st.plotly_chart(trend_fig, use_container_width=True)
+        token_df['estimated_cost'] = (
+            (token_df['prompt_tokens'] / 1000 * 0.7) +
+            (token_df['completion_tokens'] / 1000 * 2.0)
+        )
+        fig = create_token_trend(token_df)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Daily Statistics
-    with st.expander("📊 Daily Statistics"):
-        daily_stats = get_daily_token_stats(token_df)
+    # Detailed Analysis
+    with st.expander("📊 Usage Breakdown"):
+        st.markdown("### Token Distribution")
 
-        st.markdown("### Daily Token Usage")
+        token_dist = pd.DataFrame({
+            'Category': ['Prompt Tokens', 'Completion Tokens'],
+            'Count': [prompt_tokens, completion_tokens],
+            'Cost': [prompt_cost, completion_cost]
+        })
+
         st.dataframe(
-            daily_stats.style.format({
-                'Total Tokens': '{:,.0f}',
-                'Prompt Tokens': '{:,.0f}',
-                'Completion Tokens': '{:,.0f}',
-                'Queries': '{:,.0f}',
-                'Avg Tokens/Query': '{:.1f}',
-                'Estimated Cost': '${:.2f}'
+            token_dist.style.format({
+                'Count': '{:,.0f}',
+                'Cost': '${:.2f}'
             })
         )
 
-
-def get_daily_token_stats(token_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate daily token usage statistics.
-
-    Args:
-        token_df: DataFrame containing token usage data
-
-    Returns:
-        DataFrame: Daily token usage statistics
-    """
-    daily_stats = (token_df
-                   .set_index('timestamp')
-                   .resample('D')
-                   .agg({
-        'total_tokens': 'sum',
-        'prompt_tokens': 'sum',
-        'completion_tokens': 'sum'
-    })
-                   .reset_index()
-                   )
-
-    # Calculate additional metrics
-    daily_stats['Queries'] = (token_df
-                              .set_index('timestamp')
-                              .resample('D')
-                              .size()
-                              .values
-                              )
-
-    daily_stats = daily_stats.rename(columns={
-        'total_tokens': 'Total Tokens',
-        'prompt_tokens': 'Prompt Tokens',
-        'completion_tokens': 'Completion Tokens'
-    })
-
-    daily_stats['Avg Tokens/Query'] = (
-            daily_stats['Total Tokens'] / daily_stats['Queries']
-    )
-
-    daily_stats['Estimated Cost'] = (
-            (daily_stats['Prompt Tokens'] * 0.7 +
-             daily_stats['Completion Tokens'] * 2.0) / 1000
-    )
-
-    return daily_stats.sort_values('timestamp', ascending=False)
-
+        # Additional usage statistics
+        st.markdown("### Usage Statistics")
+        usage_stats = token_df[['total_tokens', 'prompt_tokens', 'completion_tokens']].describe()
+        st.dataframe(
+            usage_stats.style.format('{:,.1f}')
+        )
 
 def get_token_usage_summary(token_df: pd.DataFrame) -> Dict:
     """
-    Generate a summary of token usage metrics.
+    Generate summary of token usage metrics.
 
     Args:
         token_df: DataFrame containing token usage data
@@ -147,11 +150,16 @@ def get_token_usage_summary(token_df: pd.DataFrame) -> Dict:
     prompt_tokens = token_df['prompt_tokens'].sum()
     completion_tokens = token_df['completion_tokens'].sum()
 
+    prompt_cost = (prompt_tokens / 1000) * 0.7
+    completion_cost = (completion_tokens / 1000) * 2.0
+    total_cost = prompt_cost + completion_cost
+
     return {
         'total_tokens': total_tokens,
         'prompt_tokens': prompt_tokens,
         'completion_tokens': completion_tokens,
-        'avg_per_query': token_df['total_tokens'].mean(),
+        'avg_tokens_per_query': total_tokens / len(token_df) if len(token_df) > 0 else 0,
         'completion_ratio': completion_tokens / total_tokens if total_tokens > 0 else 0,
-        'estimated_cost': (prompt_tokens * 0.7 + completion_tokens * 2.0) / 1000
+        'total_cost': total_cost,
+        'cost_per_token': total_cost / total_tokens if total_tokens > 0 else 0
     }

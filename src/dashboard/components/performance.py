@@ -1,118 +1,137 @@
 """
 Performance tab component for the evaluation dashboard.
-Handles the display of performance metrics and trends.
+Handles the display of TruLens metrics and trends.
 """
 
 import streamlit as st
 import pandas as pd
-from typing import List
+from typing import Dict
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-from ..visualizations import (
-    create_performance_trend,
-    create_score_distribution
-)
+def create_performance_gauge(value: float, title: str) -> go.Figure:
+    """Create a gauge chart for metrics"""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value * 100,  # Convert to percentage
+        title={'text': title},
+        gauge={
+            'axis': {'range': [0, 100]},
+            'bar': {'color': "rgb(50, 168, 82)"},
+            'steps': [
+                {'range': [0, 50], 'color': "rgb(255, 99, 132)"},
+                {'range': [50, 75], 'color': "rgb(255, 205, 86)"},
+                {'range': [75, 100], 'color': "rgb(75, 192, 192)"}
+            ]
+        }
+    ))
+    fig.update_layout(height=200)
+    return fig
 
+def create_metrics_timeline(metrics_df: pd.DataFrame) -> go.Figure:
+    """Create timeline visualization of metrics"""
+    fig = make_subplots(
+        rows=3, cols=1,
+        subplot_titles=("Groundedness", "Context Relevance", "Answer Relevance")
+    )
+
+    metrics = ["Groundedness", "Context Relevance", "Answer Relevance"]
+    colors = ["rgb(75, 192, 192)", "rgb(255, 159, 64)", "rgb(54, 162, 235)"]
+
+    for idx, (metric, color) in enumerate(zip(metrics, colors), 1):
+        fig.add_trace(
+            go.Scatter(
+                x=metrics_df['timestamp'],
+                y=metrics_df[metric],
+                name=metric,
+                line=dict(color=color)
+            ),
+            row=idx, col=1
+        )
+
+    fig.update_layout(height=600, showlegend=False)
+    return fig
 
 def display_performance_metrics(metrics_df: pd.DataFrame):
     """
-    Display the performance metrics section.
+    Display the performance metrics section with TruLens evaluation results.
 
     Args:
-        metrics_df: DataFrame containing performance metrics
+        metrics_df: DataFrame containing TruLens metrics
     """
     if metrics_df.empty:
-        st.info("No performance metrics available yet. Start chatting to generate data!")
+        st.info("No performance data available yet. Start chatting to generate TruLens metrics!")
         return
 
-    metrics = ['context_relevance', 'response_relevance', 'completion_quality']
+    st.subheader("🎯 RAG Performance Overview")
 
-    # Summary metrics
-    st.subheader("📊 Overall Performance")
+    # Calculate current metrics
+    current_metrics = {
+        "Groundedness": metrics_df["Groundedness"].mean(),
+        "Context Relevance": metrics_df["Context Relevance"].mean(),
+        "Answer Relevance": metrics_df["Answer Relevance"].mean()
+    }
+
+    # Display metric gauges
     cols = st.columns(3)
-    for col, metric in zip(cols, metrics):
+    for col, (metric, value) in zip(cols, current_metrics.items()):
         with col:
-            avg_val = metrics_df[metric].mean()
-            recent_val = metrics_df[metric].iloc[-5:].mean() if len(metrics_df) >= 5 else avg_val
-            delta = recent_val - avg_val
+            fig = create_performance_gauge(value, metric)
+            st.plotly_chart(fig, use_container_width=True)
 
-            st.metric(
-                label=metric.replace('_', ' ').title(),
-                value=f"{recent_val:.2f}",
-                delta=f"{delta:+.2f} from average",
-                help=f"Recent average vs overall average ({avg_val:.2f})"
-            )
-
-    # Detailed Analysis Section
-    with st.expander("📈 Detailed Analysis", expanded=True):
-        # Performance Trend
-        st.markdown("### Performance Over Time")
-        trend_fig = create_performance_trend(metrics_df, metrics)
-        st.plotly_chart(trend_fig, use_container_width=True)
-
-        # Distribution Analysis
-        st.markdown("### Score Distribution")
-        dist_fig = create_score_distribution(metrics_df, metrics)
-        st.plotly_chart(dist_fig, use_container_width=True)
-
-    # Statistical Summary
-    with st.expander("📊 Statistical Summary"):
-        for metric in metrics:
-            st.markdown(f"**{metric.replace('_', ' ').title()}**")
-            stats = metrics_df[metric].describe()
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Mean", f"{stats['mean']:.2f}")
-                st.metric("Std Dev", f"{stats['std']:.2f}")
-            with col2:
-                st.metric("Median", f"{stats['50%']:.2f}")
-                st.metric("Count", f"{stats['count']:.0f}")
-            with col3:
-                st.metric("Min", f"{stats['min']:.2f}")
-                st.metric("Max", f"{stats['max']:.2f}")
-
-    # Recent Performance Analysis
-    # Recent Performance Analysis
-    with st.expander("🎯 Recent Performance", expanded=True):
-        recent_data = metrics_df.iloc[-10:] if len(metrics_df) > 10 else metrics_df
-
-        st.markdown("### Last 10 Interactions")
-
-        # First show the metrics table
-        st.markdown("#### Performance Metrics")
-        metrics_view = recent_data[['timestamp'] + metrics].copy()
-        st.dataframe(
-            metrics_view
-            .style.format({
-                'timestamp': lambda x: x.strftime('%Y-%m-%d %H:%M:%S'),
-                'context_relevance': '{:.2f}',
-                'response_relevance': '{:.2f}',
-                'completion_quality': '{:.2f}'
-            })
-            .background_gradient(subset=metrics, cmap='RdYlGn')
+    # Performance Timeline
+    with st.expander("📈 Performance Timeline", expanded=True):
+        st.plotly_chart(
+            create_metrics_timeline(metrics_df),
+            use_container_width=True
         )
 
-        # Then show the Q&A details
-        st.markdown("#### Questions and Answers")
-        for _, row in recent_data.iloc[::-1].iterrows():  # Reverse order to show most recent first
-            with st.container():
-                st.markdown(f"**Time**: {row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Question**")
-                    st.info(row.get('question', 'N/A'))
-                with col2:
-                    st.markdown("**Answer**")
-                    st.success(row.get('answer', 'N/A'))
-                st.divider()
+    # Detailed Analysis
+    with st.expander("📊 Detailed Analysis"):
+        col1, col2 = st.columns(2)
 
+        with col1:
+            st.markdown("### Recent Performance")
+            recent_df = metrics_df.tail(5)
+            st.dataframe(
+                recent_df[["timestamp", "Groundedness", "Context Relevance", "Answer Relevance"]]
+                .style.format({
+                    "Groundedness": "{:.2%}",
+                    "Context Relevance": "{:.2%}",
+                    "Answer Relevance": "{:.2%}"
+                })
+            )
 
-def get_performance_summary(metrics_df: pd.DataFrame) -> dict:
+        with col2:
+            st.markdown("### Statistics")
+            stats = metrics_df[["Groundedness", "Context Relevance", "Answer Relevance"]].describe()
+            st.dataframe(
+                stats.style.format("{:.2%}")
+            )
+
+    # Query Analysis
+    with st.expander("🔍 Query Analysis", expanded=True):
+        if "query" in metrics_df.columns:
+            st.markdown("### Sample Queries and Performance")
+
+            # Get sample queries with their performance metrics
+            sample_queries = metrics_df[["timestamp", "query", "Groundedness", "Context Relevance", "Answer Relevance"]].tail(10)
+
+            for _, row in sample_queries.iterrows():
+                with st.container():
+                    st.markdown(f"**Query**: {row['query']}")
+                    cols = st.columns(3)
+                    for col, metric in zip(cols, ["Groundedness", "Context Relevance", "Answer Relevance"]):
+                        with col:
+                            st.metric(metric, f"{row[metric]:.1%}")
+                    st.markdown("---")
+
+def get_performance_summary(metrics_df: pd.DataFrame) -> Dict:
     """
-    Generate a summary of performance metrics.
+    Generate a summary of TruLens performance metrics.
 
     Args:
-        metrics_df: DataFrame containing performance metrics
+        metrics_df: DataFrame containing TruLens metrics
 
     Returns:
         dict: Summary statistics for each metric
@@ -120,19 +139,20 @@ def get_performance_summary(metrics_df: pd.DataFrame) -> dict:
     if metrics_df.empty:
         return {}
 
-    metrics = ['context_relevance', 'response_relevance', 'completion_quality']
+    metrics = ["Groundedness", "Context Relevance", "Answer Relevance"]
     summary = {}
 
     for metric in metrics:
-        recent = metrics_df[metric].iloc[-5:].mean() if len(metrics_df) >= 5 else metrics_df[metric].mean()
-        overall = metrics_df[metric].mean()
+        current = metrics_df[metric].mean()
+        recent = metrics_df[metric].tail(5).mean()
 
-        summary[metric] = {
-            'recent': recent,
-            'overall': overall,
-            'trend': recent - overall,
-            'min': metrics_df[metric].min(),
-            'max': metrics_df[metric].max()
+        summary[metric.lower().replace(" ", "_")] = {
+            "current": current,
+            "recent": recent,
+            "trend": recent - current,
+            "min": metrics_df[metric].min(),
+            "max": metrics_df[metric].max(),
+            "std": metrics_df[metric].std()
         }
 
     return summary

@@ -1,20 +1,22 @@
 import streamlit as st
-from snowflake.snowpark import Session
+from snowflake.snowpark.context import get_active_session
+from trulens.core import TruSession
+from trulens.connectors.snowflake import SnowflakeConnector
 
-def get_snowpark_session():
-    """Get or create Snowflake session using singleton pattern"""
-    if 'snowpark_session' not in st.session_state:
-        connection_parameters = {
-            "account": st.secrets["snowflake"]["account"],
-            "user": st.secrets["snowflake"]["user"],
-            "password": st.secrets["snowflake"]["password"],
-            "warehouse": st.secrets["snowflake"]["warehouse"],
-            "database": st.secrets["snowflake"]["database"],
-            "schema": st.secrets["snowflake"]["schema"]
-        }
-        session = Session.builder.configs(connection_parameters).create()
-        st.session_state.snowpark_session = session
-    return st.session_state.snowpark_session
+from src.session_manager import create_session
+
+
+def get_tru_lens_session():
+    if 'tru_lens_session' not in st.session_state:
+        session = initialize_trulens()
+        st.session_state.tru_lens_session = session
+    return st.session_state.tru_lens_session
+
+def initialize_trulens():
+    """Initialize TruLens with Snowflake"""
+    session = get_active_session()
+    connector = SnowflakeConnector(snowpark_session=session)
+    return TruSession(connector=connector)
 
 def display_metrics(metrics: dict):
     """Display evaluation metrics in Streamlit"""
@@ -45,6 +47,7 @@ def display_metrics(metrics: dict):
 
 def initialize_app():
     """Initialize the application state"""
+    print("Initializing Streamlit...")
     # Initialize chatbot first
     if 'chatbot' not in st.session_state:
         from src.chatbot import PolicyChatbot
@@ -62,5 +65,4 @@ def initialize_app():
 
     if 'model_configurations' not in st.session_state:
         st.session_state.model_configurations = []
-
     return st.session_state.chatbot

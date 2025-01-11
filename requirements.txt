@@ -4,6 +4,7 @@ snowflake-ml-python
 snowflake.core
 streamlit
 trulens-eval
+trulens-providers-cortex
 
 # Data processing & visualization
 pandas

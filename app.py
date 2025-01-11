@@ -1,5 +1,8 @@
 import streamlit as st
+
+from src.session_manager import create_session
 from src.utils import initialize_app, display_metrics
+create_session()
 
 def main():
     st.set_page_config(

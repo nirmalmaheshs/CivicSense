@@ -1,35 +1,40 @@
 import pandas as pd
 import streamlit as st
 from typing import List, Dict
-from trulens_eval import Tru, Feedback
+from trulens_eval import Feedback
 from snowflake.cortex import Complete
+from trulens.connectors.snowflake import SnowflakeConnector
+from src.utils import get_snowpark_session
+from trulens.core import TruSession
+
 
 class TruLensEvaluator:
     def __init__(self):
         # Initialize TruLens
-        self.tru = Tru()
+        tru_snowflake_connector = SnowflakeConnector(
+            snowpark_session=get_snowpark_session()
+        )
+        self.tru = TruSession(connector=tru_snowflake_connector)
 
         # Define feedback functions
         self.feedback_functions = [
             Feedback(
-                self.context_relevance,
-                name="Context Relevance",
-                higher_is_better=True
+                self.context_relevance, name="Context Relevance", higher_is_better=True
             ),
             Feedback(
                 self.response_relevance,
                 name="Response Relevance",
-                higher_is_better=True
+                higher_is_better=True,
             ),
             Feedback(
                 self.completion_quality,
                 name="Completion Quality",
-                higher_is_better=True
-            )
+                higher_is_better=True,
+            ),
         ]
 
         # Initialize metrics storage
-        if 'metrics_history' not in st.session_state:
+        if "metrics_history" not in st.session_state:
             st.session_state.metrics_history = []
 
     def context_relevance(self, query: str, context: List[str]) -> float:
@@ -88,7 +93,9 @@ class TruLensEvaluator:
         except:
             return 0.0
 
-    def log_feedback(self, query: str, context: List[str], response: str, metadata: Dict = None):
+    def log_feedback(
+        self, query: str, context: List[str], response: str, metadata: Dict = None
+    ):
         """Log feedback for a single interaction"""
         if metadata is None:
             metadata = {}
@@ -104,14 +111,10 @@ class TruLensEvaluator:
                 "timestamp": pd.Timestamp.now().isoformat(),
                 "context_relevance": float(context_rel),
                 "response_relevance": float(response_rel),
-                "completion_quality": float(completion_qual)
+                "completion_quality": float(completion_qual),
             }
 
-            metadata.update({
-                "query": query,
-                "context": context,
-                "response": response
-            })
+            metadata.update({"query": query, "context": context, "response": response})
 
             metrics["metadata"] = metadata
             st.session_state.metrics_history.append(metrics)
@@ -122,16 +125,18 @@ class TruLensEvaluator:
             return {
                 "context_relevance": 0.0,
                 "response_relevance": 0.0,
-                "completion_quality": 0.0
+                "completion_quality": 0.0,
             }
 
-        df = pd.DataFrame([
-            {k: v for k, v in m.items() if k != 'metadata'}
-            for m in st.session_state.metrics_history
-        ])
+        df = pd.DataFrame(
+            [
+                {k: v for k, v in m.items() if k != "metadata"}
+                for m in st.session_state.metrics_history
+            ]
+        )
 
         return {
             "context_relevance": float(df["context_relevance"].mean()),
             "response_relevance": float(df["response_relevance"].mean()),
-            "completion_quality": float(df["completion_quality"].mean())
+            "completion_quality": float(df["completion_quality"].mean()),
         }

@@ -1,0 +1,23 @@
+name: CivicSense
+channels:
+  - https://repo.anaconda.com/pkgs/snowflake  # Snowflake channel should be first
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8.20
+  - snowflake-snowpark-python
+  - matplotlib-base>=3.7.1
+  - pandas>=1.5.3
+  - streamlit>=1.24.0
+  - pip
+  - pip:
+    - snowflake-ml-python
+    - trulens-eval>=0.21.0
+    - nest-asyncio>=1.5.8
+    - snowflake.core
+    - plotly>=5.13.0
+    - openpyxl>=3.1.2
+    - seaborn>=0.12.2
+    - python-dotenv>=1.0.0
+    - llama-index>=0.9.27
+    - styleframe>=4.1

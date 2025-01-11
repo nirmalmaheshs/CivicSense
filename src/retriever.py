@@ -15,7 +15,7 @@ class CortexSearchRetriever:
             cortex_search_service = (
                 root.databases[st.secrets["snowflake"]["database"]]
                 .schemas[st.secrets["snowflake"]["schema"]]
-                .cortex_search_services["CC_SEARCH_SERVICE_CS"]
+                .cortex_search_services["SEARCH_SERVICE"]
             )
 
             resp = cortex_search_service.search(

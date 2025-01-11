@@ -9,7 +9,7 @@ from trulens.apps.custom import instrument, TruCustomApp
 
 from src.retriever import CortexSearchRetriever
 from snowflake.snowpark.context import get_active_session
-from src.utils import get_tru_lens_session
+from src.utils import get_snowflake_connector, get_tru_lens_session
 
 
 class PolicyChatbot:
@@ -18,19 +18,22 @@ class PolicyChatbot:
 
         # Get Snowflake session and set default
         session = get_active_session()
-        Cortex.DEFAULT_SNOWPARK_SESSION = session
 
         # Initialize TruLens instrumentation
         self.tru_recorder = TruCustomApp(
             self,
             app_name="PolicyChatbot",
-            feedbacks=self._initialize_feedback(session)
+            feedbacks=self._initialize_feedback(session),
+            connector=get_snowflake_connector()
         )
+
+
 
     def _initialize_feedback(self, session) -> List[Feedback]:
         """Initialize TruLens feedback functions"""
         provider = Cortex(
-            model_id="mistral-large2"
+            model_id="mistral-large2",
+            snowpark_session=get_active_session()
         )
 
         f_groundedness = (
@@ -72,14 +75,14 @@ class PolicyChatbot:
                 return "I'm sorry, but I couldn't find relevant information to answer your question."
 
             prompt = f"""
-            You are a helpful government policy assistant. Using only the provided context, 
+            You are a helpful government policy assistant. Using only the provided context,
             answer questions about government policies and benefits.
 
             Context: {' '.join(context)}
 
             Question: {query}
 
-            Provide a clear, concise answer based only on the context provided. 
+            Provide a clear, concise answer based only on the context provided.
             If you're unsure or the information isn't in the context, say so.
             """
 
@@ -92,9 +95,6 @@ class PolicyChatbot:
 
     def get_metrics(self) -> Dict:
         """Get evaluation metrics from TruLens"""
-        from trulens.core import TruSession
-        from trulens.connectors.snowflake import SnowflakeConnector
-
         tru = get_tru_lens_session()
 
         # Get leaderboard

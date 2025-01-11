@@ -2,22 +2,16 @@ import pandas as pd
 import streamlit as st
 from typing import Dict, List
 
-from trulens.core import TruSession
-from trulens.connectors.snowflake import SnowflakeConnector
 from trulens.providers.cortex.provider import Cortex
 from trulens.core import Feedback
 from trulens.core import Select
-from snowflake.snowpark.context import get_active_session
-
+from src.utils import get_tru_lens_session
 
 class TruLensEvaluator:
     def __init__(self):
-        # Initialize Snowflake session
-        self.session = get_active_session()
-
         # Setup TruLens with Snowflake
-        self.connector = SnowflakeConnector(snowpark_session=self.session)
-        self.tru = TruSession(connector=self.connector)
+
+        self.tru = get_tru_lens_session()
 
         # Initialize Cortex provider
         self.provider = Cortex(snowpark_session=self.session, model_engine="mistral-large2")

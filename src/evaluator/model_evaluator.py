@@ -9,11 +9,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict
 
-from trulens.core import TruSession
-from trulens.connectors.snowflake import SnowflakeConnector
-from trulens.core.guardrails.base import context_filter
-
-
 def create_radar_chart(eval_df: pd.DataFrame) -> go.Figure:
     """Create radar chart for model comparison"""
     metrics = ['Groundedness', 'Context Relevance', 'Answer Relevance']
@@ -51,11 +46,6 @@ def display_model_evaluation(eval_df: pd.DataFrame, snowpark_session=None):
         snowpark_session: Optional Snowpark session for TruLens
     """
     st.subheader("📊 Model Evaluation & Guardrails")
-
-    # Initialize TruLens if session provided
-    if snowpark_session:
-        tru_connector = SnowflakeConnector(snowpark_session=snowpark_session)
-        tru = TruSession(connector=tru_connector)
 
     # Model Configuration Section
     with st.expander("⚙️ Model Configuration", expanded=True):

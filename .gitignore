@@ -1,5 +1,6 @@
 .idea
 .idea/*
 .venv
+.streamlit
 default.sqlite
 __pycache__

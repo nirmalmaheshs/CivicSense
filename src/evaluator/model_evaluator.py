@@ -21,8 +21,7 @@ class ModelEvaluator:
             {
                 "question": "What are the eligibility requirements for healthcare benefits?",
                 "ground_truth": "To be eligible for healthcare benefits, you must be a U.S. citizen or legal resident, meet income requirements based on the Federal Poverty Level, and not have access to affordable employer-sponsored coverage. Additional requirements may include age, disability status, and household size."
-            },
-            # ... other test cases ...
+            }
         ]
 
     def evaluate_answer_similarity(self, model_answer: str, ground_truth: str) -> float:
@@ -43,6 +42,7 @@ class ModelEvaluator:
 
         try:
             response = Complete("mistral-large2", prompt)
+            print(response)
             score = float(response.strip())
             return min(max(score, 0), 1)
         except:

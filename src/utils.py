@@ -3,27 +3,16 @@ from snowflake.snowpark import Session
 
 def get_snowpark_session():
     """Get or create Snowflake session using singleton pattern"""
-    if 'snowpark_session' not in st.session_state:
+    if "snowpark_session" not in st.session_state:
         connection_parameters = {
             "account": st.secrets["snowflake"]["account"],
             "user": st.secrets["snowflake"]["user"],
             "password": st.secrets["snowflake"]["password"],
             "warehouse": st.secrets["snowflake"]["warehouse"],
             "database": st.secrets["snowflake"]["database"],
-            "schema": st.secrets["snowflake"]["schema"]
+            "schema": st.secrets["snowflake"]["schema"],
         }
         session = Session.builder.configs(connection_parameters).create()
         st.session_state.snowpark_session = session
     return st.session_state.snowpark_session
 
-def initialize_app():
-    """Initialize the application state"""
-    # Initialize chatbot first
-    if 'chatbot' not in st.session_state:
-        from src.chatbot import PolicyChatbot
-        st.session_state.chatbot = PolicyChatbot()
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    return st.session_state.chatbot

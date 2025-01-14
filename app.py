@@ -1,3 +1,5 @@
+import uuid
+
 import streamlit as st
 import requests
 import mimetypes
@@ -51,7 +53,7 @@ def handle_file_actions(signed_url: str, filename: str):
             mime_type = get_mime_type(filename)
             st.download_button(
                 label="📥",
-                key=filename,
+                key=f"{filename}_{uuid.uuid4()}",
                 data=content,
                 file_name=filename,
                 mime=mime_type,
@@ -210,39 +212,42 @@ def main():
         # In your main chat handling section:
         with st.chat_message("assistant"):
             with st.spinner("Searching policy documents..."):
-                # Ensure we have an evaluator
-                if "evaluator" not in st.session_state:
-                    st.session_state.evaluator = Evaluator()
-
-                # Get the TruApp instance
-                tru_app = st.session_state.evaluator.tru_app
-
-                # Record and evaluate the interaction
-                with tru_app as recording:
-                    response, references = st.session_state.chatbot.query(prompt)
-
-                # Create message with response and references
-                message = {
-                    "role": "assistant",
-                    "content": response,
-                    "references": references,
-                }
-
-                # Display the message
-                display_message_with_references(message)
-                st.session_state.messages.append(message)
-
-                # Get and display metrics
                 try:
-                    leaderboard = st.session_state.evaluator.session.get_leaderboard()
-                    if not leaderboard.empty:
-                        st.write("### 📊 Performance Metrics")
-                        st.dataframe(leaderboard)
+                    # Get response with or without TruLens
+                    if hasattr(st.session_state, 'truapp') and st.session_state.truapp:
+                        with st.session_state.truapp as recording:
+                            response, references = st.session_state.chatbot.query(prompt)
                     else:
-                        st.info("Gathering evaluation metrics... This may take a few interactions.")
+                        response, references = st.session_state.chatbot.query(prompt)
+
+                    # Create and display message
+                    message = {
+                        "role": "assistant",
+                        "content": response,
+                        "references": references,
+                    }
+                    display_message_with_references(message)
+                    st.session_state.messages.append(message)
+
+                    # Try to get metrics if available
+                    if hasattr(st.session_state, 'evaluator') and st.session_state.evaluator:
+                        leaderboard = st.session_state.evaluator.get_leaderboard()
+                        if leaderboard is not None and not leaderboard.empty:
+                            st.write("### 📊 Performance Metrics")
+                            st.dataframe(leaderboard)
+
                 except Exception as e:
-                    st.error(f"Error retrieving metrics: {str(e)}")
-                    print(f"Detailed error: {str(e)}")  # For debugging
+                    st.error("An error occurred while processing your request.")
+                    print(f"Error in chat processing: {str(e)}")
+                    # Fallback to basic response without TruLens
+                    response, references = st.session_state.chatbot.query(prompt)
+                    message = {
+                        "role": "assistant",
+                        "content": response,
+                        "references": references,
+                    }
+                    display_message_with_references(message)
+                    st.session_state.messages.append(message)
 
 if __name__ == "__main__":
     main()

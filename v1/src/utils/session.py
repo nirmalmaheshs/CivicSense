@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from snowflake.snowpark.session import Session
 from trulens.connectors.snowflake import SnowflakeConnector
 from trulens.core import TruSession
+import snowflake.connector
 
 
 class AppSession:
@@ -24,6 +25,7 @@ class AppSession:
             snowpark_session=self.snowpark_session
         )
         self.tru_session = TruSession(connector=self.tru_snowflake_connector)
+        self.snowflake_connector = snowflake.connector.connect(**connection_params)
 
 
 session = AppSession()

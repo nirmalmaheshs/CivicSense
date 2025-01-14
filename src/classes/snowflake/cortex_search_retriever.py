@@ -11,7 +11,7 @@ class CortexSearchRetriever(BaseRetriever):
         self._snowpark_session = snowpark_session
         self._limit_to_retrieve = limit_to_retrieve
 
-    def retrieve(self, query: str) -> List[str]:
+    def retrieve(self, query: str) -> List[dict]:
         root = Root(self._snowpark_session)
         cortex_search_service = (
             root.databases[os.getenv("SNOWFLAKE_DATABASE")]
@@ -26,6 +26,9 @@ class CortexSearchRetriever(BaseRetriever):
         )
 
         if resp.results:
-            return [curr["chunk"] for curr in resp.results]
+            return [{
+                "chunk": curr["chunk"],
+                "relative_path": curr["relative_path"]
+            } for curr in resp.results]
         else:
             return []

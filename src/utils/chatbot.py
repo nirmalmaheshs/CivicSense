@@ -28,19 +28,15 @@ class StreamlitChatBot:
             """
         )
 
-    def create_chat_interface(self):
-        """Create the chat interface"""
-        chat_container = st.container()
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        with chat_container:
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+    def format_source_link(self, source: str) -> str:
+        """Format source filename as a clickable link"""
+        base_url = Defaults.SITE_DOMAIN_PREFIX
+        # Extract filename without extension
+        filename = source.split('.')[0]
+        return f"[{base_url}{filename}]({base_url}{filename})"
 
     def display_messages(self, prompt: str):
-        """Display user and assistant messages"""
+        """Display user and assistant messages with references"""
         with st.chat_message("user"):
             st.markdown(prompt)
 
@@ -49,9 +45,38 @@ class StreamlitChatBot:
                 with self.evaluator as recording:
                     response = self.rag.query(prompt)
 
-                message = {"role": "assistant", "content": response}
-                st.markdown(message["content"])
+                # Display the main answer
+                st.markdown(response["answer"])
+
+                # Display sources in an expander if available
+                if response.get("sources"):
+                    with st.expander("View References"):
+                        st.markdown("Sources:")
+                        for source in response["sources"]:
+                            st.markdown(f"- {self.format_source_link(source)}")
+
+                # Store both answer and sources in session state
+                message = {
+                    "role": "assistant",
+                    "content": response["answer"],
+                    "sources": response.get("sources", [])
+                }
                 st.session_state.messages.append(message)
+
+    def create_chat_interface(self):
+        """Create the chat interface with reference support"""
+        chat_container = st.container()
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+
+        with chat_container:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+                    if message["role"] == "assistant" and message.get("sources"):
+                        with st.expander("View References"):
+                            for source in message["sources"]:
+                                st.markdown(f"- {self.format_source_link(source)}")
 
     def create_chat_input(self):
         """Create the chat input area"""
@@ -59,18 +84,8 @@ class StreamlitChatBot:
             st.session_state.messages.append({"role": "user", "content": prompt})
             self.display_messages(prompt)
 
-    def set_page_config(self):
-        """Set the Streamlit page configuration"""
-        st.set_page_config(
-            page_title=f"{Defaults.APP_NAME}",
-            page_icon="🏛️",
-            layout="wide",
-            initial_sidebar_state="expanded",
-        )
-
     def create_bot(self):
         """Create the chatbot app"""
-        self.set_page_config()
         # page = self.create_sidebar()
         self.create_main_content()
         self.create_chat_interface()

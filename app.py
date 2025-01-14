@@ -3,7 +3,6 @@ import requests
 import mimetypes
 from src.chatbot import PolicyChatbot
 from src.evaluator import Evaluator
-from src.utils import get_snowpark_session
 
 
 def initialize_app():
@@ -12,15 +11,16 @@ def initialize_app():
     if "chatbot" not in st.session_state:
         st.session_state.chatbot = PolicyChatbot()
 
-    if "truapp" not in st.session_state:
-        st.session_state.truapp = Evaluator().tru_app
-        st.session_state.trusession = Evaluator().session
+    # Initialize evaluator with proper database setup
+    if "evaluator" not in st.session_state:
+        st.session_state.evaluator = Evaluator()
+        st.session_state.truapp = st.session_state.evaluator.tru_app
+        st.session_state.trusession = st.session_state.evaluator.session
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     return st.session_state.chatbot
-
 
 def get_mime_type(filename: str) -> str:
     """Get MIME type based on file extension"""
@@ -207,13 +207,19 @@ def main():
             st.markdown(prompt)
 
         # Generate and display assistant response
+        # In your main chat handling section:
         with st.chat_message("assistant"):
             with st.spinner("Searching policy documents..."):
+                # Ensure we have an evaluator
+                if "evaluator" not in st.session_state:
+                    st.session_state.evaluator = Evaluator()
 
-                with st.session_state.truapp as recording:
+                # Get the TruApp instance
+                tru_app = st.session_state.evaluator.tru_app
+
+                # Record and evaluate the interaction
+                with tru_app as recording:
                     response, references = st.session_state.chatbot.query(prompt)
-
-                print(st.session_state.trusession.get_leaderboard())
 
                 # Create message with response and references
                 message = {
@@ -222,10 +228,21 @@ def main():
                     "references": references,
                 }
 
-                # Display the message and add to history
+                # Display the message
                 display_message_with_references(message)
                 st.session_state.messages.append(message)
 
+                # Get and display metrics
+                try:
+                    leaderboard = st.session_state.evaluator.session.get_leaderboard()
+                    if not leaderboard.empty:
+                        st.write("### 📊 Performance Metrics")
+                        st.dataframe(leaderboard)
+                    else:
+                        st.info("Gathering evaluation metrics... This may take a few interactions.")
+                except Exception as e:
+                    st.error(f"Error retrieving metrics: {str(e)}")
+                    print(f"Detailed error: {str(e)}")  # For debugging
 
 if __name__ == "__main__":
     main()

@@ -1,50 +1,75 @@
 import numpy as np
 import streamlit as st
-from trulens.core import Feedback
-from trulens.core import Select
-from trulens.providers.cortex import Cortex
-from src.utils import get_snowpark_session
+from trulens.core import Select, TruSession, Feedback
+from trulens.providers.cortex.provider import Cortex
 from trulens.apps.custom import TruCustomApp
-from trulens.core import TruSession
+from trulens.connectors.snowflake import SnowflakeConnector
+from src.utils import get_snowpark_session
 
 
 class Evaluator:
-
     def __init__(self):
-        provider = Cortex(snowpark_session=get_snowpark_session())
+        # Get Snowflake session
+        self.snowpark_session = get_snowpark_session()
 
-        # Define a groundedness feedback function
-        f_groundedness = (
+        # Initialize Snowflake connector
+        self.sf_connector = SnowflakeConnector(
+            snowpark_session=self.snowpark_session
+        )
+
+        # Initialize TruSession
+        self.session = TruSession(connector=self.sf_connector)
+
+        # Initialize feedback provider
+        self.provider = Cortex(snowpark_session=self.snowpark_session)
+
+        # Define feedback functions
+        self.feedbacks = [
             Feedback(
-                provider.groundedness_measure_with_cot_reasons, name="Groundedness"
-            )
-            .on(Select.RecordCalls.retrieve.rets.collect())
-            .on_output()
-        )
-        # Question/answer relevance between overall question and answer.
-        f_answer_relevance = (
-            Feedback(provider.relevance_with_cot_reasons, name="Answer Relevance")
-            .on_input()
-            .on_output()
-        )
+                self.provider.groundedness_measure_with_cot_reasons,
+                name="Groundedness"
+            ).on(Select.RecordCalls.retrieve.rets).on_output(),
 
-        # Context relevance between question and each context chunk.
-        f_context_relevance = (
             Feedback(
-                provider.context_relevance_with_cot_reasons, name="Context Relevance"
-            )
-            .on_input()
-            .on(Select.RecordCalls.retrieve.rets[:])
-            .aggregate(np.mean)
-        )
+                self.provider.relevance_with_cot_reasons,
+                name="Answer Relevance"
+            ).on_input().on_output(),
 
-        rag = st.session_state.chatbot
+            Feedback(
+                self.provider.context_relevance_with_cot_reasons,
+                name="Context Relevance"
+            ).on_input().on(Select.RecordCalls.retrieve.rets).aggregate(np.mean)
+        ]
 
-        self.session = TruSession()
+        # Initialize TruLens app with retries
+        if "chatbot" in st.session_state:
+            max_retries = 3
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    self.tru_app = TruCustomApp(
+                        st.session_state.chatbot,
+                        app_name="PolicyBot",
+                        feedbacks=self.feedbacks
+                    )
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt == max_retries - 1:
+                        st.error(f"Failed to initialize TruLens app: {str(last_error)}")
+                        raise e
+                    else:
+                        import time
+                        time.sleep(1)
 
-        self.tru_app = TruCustomApp(
-            rag,
-            app_name="RAG",
-            app_version="base",
-            feedbacks=[f_groundedness, f_answer_relevance, f_context_relevance],
-        )
+    def get_leaderboard(self):
+        """Get the evaluation leaderboard with error handling"""
+        try:
+            leaderboard = self.session.get_leaderboard()
+            if leaderboard is None or leaderboard.empty:
+                print("No metrics available yet")
+                return None
+            return leaderboard
+        except Exception as e:
+            print(f"Error getting leaderboard: {str(e)}")
+            return None

@@ -1,9 +1,8 @@
-import time
 import streamlit as st
 from typing import Dict, List, Tuple
 from snowflake.cortex import Complete
 from src.utils import get_snowpark_session
-from trulens_eval.tru_custom_app import instrument
+from trulens.apps.custom import instrument
 from snowflake.core import Root
 
 

@@ -1,9 +1,10 @@
+import uuid
+
 import streamlit as st
 import requests
 import mimetypes
 from src.chatbot import PolicyChatbot
 from src.evaluator import Evaluator
-from src.utils import get_snowpark_session
 
 
 def initialize_app():
@@ -12,15 +13,16 @@ def initialize_app():
     if "chatbot" not in st.session_state:
         st.session_state.chatbot = PolicyChatbot()
 
-    if "truapp" not in st.session_state:
-        st.session_state.truapp = Evaluator().tru_app
-        st.session_state.trusession = Evaluator().session
+    # Initialize evaluator with proper database setup
+    if "evaluator" not in st.session_state:
+        st.session_state.evaluator = Evaluator()
+        st.session_state.truapp = st.session_state.evaluator.tru_app
+        st.session_state.trusession = st.session_state.evaluator.session
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     return st.session_state.chatbot
-
 
 def get_mime_type(filename: str) -> str:
     """Get MIME type based on file extension"""
@@ -51,7 +53,7 @@ def handle_file_actions(signed_url: str, filename: str):
             mime_type = get_mime_type(filename)
             st.download_button(
                 label="📥",
-                key=filename,
+                key=f"{filename}_{uuid.uuid4()}",
                 data=content,
                 file_name=filename,
                 mime=mime_type,
@@ -207,25 +209,45 @@ def main():
             st.markdown(prompt)
 
         # Generate and display assistant response
+        # In your main chat handling section:
         with st.chat_message("assistant"):
             with st.spinner("Searching policy documents..."):
+                try:
+                    # Get response with or without TruLens
+                    if hasattr(st.session_state, 'truapp') and st.session_state.truapp:
+                        with st.session_state.truapp as recording:
+                            response, references = st.session_state.chatbot.query(prompt)
+                    else:
+                        response, references = st.session_state.chatbot.query(prompt)
 
-                with st.session_state.truapp as recording:
+                    # Create and display message
+                    message = {
+                        "role": "assistant",
+                        "content": response,
+                        "references": references,
+                    }
+                    display_message_with_references(message)
+                    st.session_state.messages.append(message)
+
+                    # Try to get metrics if available
+                    if hasattr(st.session_state, 'evaluator') and st.session_state.evaluator:
+                        leaderboard = st.session_state.evaluator.get_leaderboard()
+                        if leaderboard is not None and not leaderboard.empty:
+                            st.write("### 📊 Performance Metrics")
+                            st.dataframe(leaderboard)
+
+                except Exception as e:
+                    st.error("An error occurred while processing your request.")
+                    print(f"Error in chat processing: {str(e)}")
+                    # Fallback to basic response without TruLens
                     response, references = st.session_state.chatbot.query(prompt)
-
-                print(st.session_state.trusession.get_leaderboard())
-
-                # Create message with response and references
-                message = {
-                    "role": "assistant",
-                    "content": response,
-                    "references": references,
-                }
-
-                # Display the message and add to history
-                display_message_with_references(message)
-                st.session_state.messages.append(message)
-
+                    message = {
+                        "role": "assistant",
+                        "content": response,
+                        "references": references,
+                    }
+                    display_message_with_references(message)
+                    st.session_state.messages.append(message)
 
 if __name__ == "__main__":
     main()

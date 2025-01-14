@@ -1,5 +1,6 @@
 from src.classes.base.base_rag import BaseRag
 from src.classes.snowflake.cortex_search_retriever import CortexSearchRetriever
+from src.utils.config import Defaults
 from src.utils.session import session
 from snowflake.cortex import complete
 
@@ -16,7 +17,7 @@ class Predictor(BaseRag):
         """
         return self.retriever.retrieve(query)
 
-    def generate_completion(self, query: str, context_str: list) -> str:
+    def generate_completion(self, query: str, context_str: list, model_name=Defaults.LLM_MODEL) -> str:
         """
         Generate answer from context.
         """
@@ -29,7 +30,7 @@ class Predictor(BaseRag):
           {query}
           Answer:
         """
-        return complete("mistral-large", prompt, session=session.snowpark_session)
+        return complete(model_name, prompt, session=session.snowpark_session)
 
     def query(self, query: str) -> str:
         context_str = self.retrieve_context(query)

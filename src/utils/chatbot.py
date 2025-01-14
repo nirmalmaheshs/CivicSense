@@ -1,12 +1,14 @@
+import pandas as pd
 import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 from src.utils.config import Defaults
 from src.utils.dashboard import (
     get_feedback_metrics,
     get_cost_metrics,
     get_latency_metrics,
+    get_daily_stats
 )
-import pandas as pd
-import plotly.express as px
 
 
 class StreamlitChatBot:
@@ -27,108 +29,203 @@ class StreamlitChatBot:
 
     def create_dashboard(self):
         """Create the dashboard page with subtabs"""
-        st.title("Dashboard 📊")
-        st.markdown("Analyze the chatbot's performance and user interactions.")
+        st.title(f"{Defaults.APP_NAME} Dashboard 📊")
+        st.markdown("### Performance Analytics and Monitoring")
 
-        tab1, tab2, tab3 = st.tabs(["Usage Stats", "Cost Analysis", "Performance"])
+        # Create metrics KPI cards
+        self.display_kpi_metrics()
 
-        self.create_usage_stats(tab1)
-        self.create_cost_analysis(tab2)
-        self.create_performance_metrics(tab3)
+        # Create tabs for detailed analysis
+        tab1, tab2, tab3 = st.tabs(["Quality Metrics", "Cost Analysis", "Performance"])
 
-    def create_usage_stats(self, tab):
-        """Create the usage stats tab"""
-        with tab:
-            st.title("Feedback Relevance Metrics")
-            df = get_feedback_metrics()
-            self.display_feedback_metrics(df)
+        with tab1:
+            self.create_quality_metrics_tab()
 
-    def display_feedback_metrics(self, df):
-        """Display feedback metrics as a bar chart"""
-        fig = px.bar(
-            df.melt(id_vars="NAME", var_name="Metric", value_name="Value"),
-            x="NAME",
-            y="Value",
-            color="Metric",
-            barmode="group",
-            title="Feedback Relevance Metrics",
-            labels={
-                "NAME": "Category",
-                "Value": "Score",
-                "Metric": "Feedback Type",
-            },
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        with tab2:
+            self.create_cost_analysis_tab()
 
-    def create_cost_analysis(self, tab):
+        with tab3:
+            self.create_performance_metrics_tab()
+
+    def display_kpi_metrics(self):
+        """Display KPI metrics at the top of the dashboard"""
+        try:
+            feedback_df = get_feedback_metrics()
+            daily_stats = get_daily_stats()
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                # Get total queries from daily stats
+                queries = daily_stats['QUERY_COUNT'].sum() if not daily_stats.empty else 0
+                st.metric("Total Queries", f"{queries:,.0f}")
+
+            with col2:
+                # Calculate average response time
+                avg_latency = daily_stats['AVG_LATENCY'].mean() if not daily_stats.empty else 0
+                st.metric("Avg Response Time", f"{avg_latency:.2f}s")
+
+            with col3:
+                try:
+                    groundedness = feedback_df[feedback_df['name'] == 'Groundedness']['avg_score'].iloc[0]
+                    groundedness_display = f"{groundedness:.1%}"
+                except (KeyError, IndexError):
+                    groundedness_display = "N/A"
+                st.metric("Groundedness", groundedness_display)
+
+            with col4:
+                try:
+                    relevance = feedback_df[feedback_df['name'] == 'Context Relevance']['avg_score'].iloc[0]
+                    relevance_display = f"{relevance:.1%}"
+                except (KeyError, IndexError):
+                    relevance_display = "N/A"
+                st.metric("Context Relevance", relevance_display)
+
+        except Exception as e:
+            st.error(f"Error loading metrics: {str(e)}")
+            st.write("Debug info:")
+            if 'daily_stats' in locals():
+                st.write("Available columns in daily_stats:", daily_stats.columns.tolist())
+            if 'feedback_df' in locals():
+                st.write("Available columns in feedback_df:", feedback_df.columns.tolist())
+
+    def create_quality_metrics_tab(self):
+        """Create the quality metrics tab"""
+        st.header("Quality Metrics")
+
+        try:
+            feedback_df = get_feedback_metrics()
+
+            # Create bar chart for feedback scores
+            fig = px.bar(
+                feedback_df,
+                x='NAME',  # Updated to match the query
+                y='AVG_SCORE',  # Updated to match the query
+                error_y=feedback_df['MAX_SCORE'] - feedback_df['AVG_SCORE'],
+                error_y_minus=feedback_df['AVG_SCORE'] - feedback_df['MIN_SCORE'],
+                title="Feedback Scores by Type",
+                labels={
+                    'NAME': 'Metric Type',
+                    'AVG_SCORE': 'Score',
+                    'QUERY_COUNT': 'Number of Queries'
+                },
+                color='NAME'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Show detailed metrics table
+            st.markdown("### Detailed Metrics")
+
+            # Format the dataframe for display
+            display_df = feedback_df.copy()
+            for col in ['MIN_SCORE', 'AVG_SCORE', 'MAX_SCORE']:
+                display_df[col] = display_df[col].apply(lambda x: f"{x:.2%}")
+
+            st.dataframe(
+                display_df,
+                column_config={
+                    "NAME": "Metric Name",
+                    "MIN_SCORE": "Minimum Score",
+                    "AVG_SCORE": "Average Score",
+                    "MAX_SCORE": "Maximum Score",
+                    "QUERY_COUNT": "Number of Queries"
+                }
+            )
+
+        except Exception as e:
+            st.error(f"Error creating quality metrics visualization: {str(e)}")
+            st.write("Debug info:")
+            if 'feedback_df' in locals():
+                st.write("Available columns:", feedback_df.columns.tolist())
+                st.write("Data sample:", feedback_df.head())
+
+    def create_cost_analysis_tab(self):
         """Create the cost analysis tab"""
-        with tab:
-            st.header("Cost Analysis")
-            st.markdown("### Data Overview")
+        st.header("Cost Analysis")
+
+        try:
             cost_df = get_cost_metrics()
-            cost_df["COST"] = pd.to_numeric(cost_df["COST"], errors="coerce")
 
-            # Display cost metrics
-            self.display_cost_metrics(cost_df)
+            # Format the dataframe safely handling None values
+            display_df = cost_df.copy()
+            display_df['COST'] = display_df['COST'].apply(lambda x: f"${x:.2f}" if pd.notnull(x) else "N/A")
+            display_df['TOKENS'] = display_df['TOKENS'].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A")
 
-            # Plot cost distribution
-            self.display_cost_distribution(cost_df)
+            # Create visualization for cost metrics
+            fig1 = px.line(
+                cost_df,
+                x='TIME',
+                y='COST',
+                title='Cost Over Time',
+                labels={
+                    'TIME': 'Time',
+                    'COST': 'Cost ($)'
+                }
+            )
+            st.plotly_chart(fig1, use_container_width=True)
 
-            # Scatter plot for Cost vs. Tokens
-            self.display_cost_vs_tokens(cost_df)
+            # Rest of your visualizations...
 
-    def display_cost_metrics(self, cost_df):
-        """Display the cost metrics"""
-        avg_cost = cost_df["COST"].mean()
-        max_cost = cost_df["COST"].max()
-        min_cost = cost_df["COST"].min()
+            # Show detailed metrics table
+            st.markdown("### Detailed Metrics")
+            st.dataframe(
+                display_df,
+                column_config={
+                    "TIME": "Timestamp",
+                    "COST": "Total Cost",
+                    "TOKENS": "Token Count",
+                    "QUERY_COUNT": "Number of Queries"
+                }
+            )
 
-        st.markdown(f"**Average Cost:** {avg_cost:.2f}")
-        st.markdown(f"**Maximum Cost:** {max_cost:.2f}")
-        st.markdown(f"**Minimum Cost:** {min_cost:.2f}")
+        except Exception as e:
+            st.error(f"Error creating cost analysis visualization: {str(e)}")
+            st.write("Debug info:")
+            if 'cost_df' in locals():
+                st.write("Available columns:", cost_df.columns.tolist())
+                st.write("Data sample:", cost_df.head())
 
-    def display_cost_distribution(self, cost_df):
-        """Display the cost distribution as a bar chart"""
-        fig = px.bar(
-            cost_df,
-            x=cost_df.index,
-            y="COST",
-            title="Cost per Record",
-            labels={"index": "Record Index", "COST": "Cost"},
-            color="COST",
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    def display_cost_vs_tokens(self, cost_df):
-        """Display a scatter plot for cost vs. tokens"""
-        scatter_fig = px.scatter(
-            cost_df,
-            x="TOKENS",
-            y="COST",
-            size="COST",
-            title="Cost vs Tokens",
-            labels={"TOKENS": "Tokens", "COST": "Cost"},
-        )
-        st.plotly_chart(scatter_fig, use_container_width=True)
-
-    def create_performance_metrics(self, tab):
+    def create_performance_metrics_tab(self):
         """Create the performance metrics tab"""
-        with tab:
-            performance_df = get_latency_metrics()
-            self.display_performance_metrics(performance_df)
+        st.header("Performance Metrics")
 
-    def display_performance_metrics(self, performance_df):
-        """Display performance metrics as a bar chart"""
-        st.markdown("### Latency Distribution")
-        fig = px.bar(
-            performance_df,
-            x=performance_df.index,
-            y="LATENCY",
-            title="LATENCY per Record",
-            labels={"index": "Record Index", "LATENCY": "Latency"},
-            color="LATENCY",
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        try:
+            latency_df = get_latency_metrics()
+            if not latency_df.empty:
+                # Create area chart for latency
+                fig = px.area(
+                    latency_df,
+                    x='TIME',  # matches the column name from our SQL query
+                    y=["MIN_LATENCY", "AVG_LATENCY", "MAX_LATENCY"],
+                    title='Response Time Distribution',
+                    labels={
+                        'time': 'Time',
+                        'value': 'Latency (seconds)',
+                        'variable': 'Metric Type'
+                    }
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Show request volume over time
+                fig2 = px.line(
+                    latency_df,
+                    x='TIME',
+                    y='REQUEST_COUNT',
+                    title='Request Volume Over Time',
+                    labels={
+                        'time': 'Time',
+                        'request_count': 'Number of Requests'
+                    }
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("No performance data available yet.")
+
+        except Exception as e:
+            st.error(f"Error creating performance metrics visualization: {str(e)}")
+            st.write("Debug info:")
+            if 'latency_df' in locals():
+                st.write("Available columns:", latency_df.columns.tolist())
+                st.write("Data sample:", latency_df.head())
 
     def create_main_content(self):
         """Create the main chatbot content"""
@@ -145,18 +242,11 @@ class StreamlitChatBot:
         chat_container = st.container()
         if "messages" not in st.session_state:
             st.session_state.messages = []
+
         with chat_container:
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
-
-    def set_page_config(self):
-        st.set_page_config(
-            page_title=f"{Defaults.APP_NAME}",
-            page_icon="🏛️",
-            layout="wide",
-            initial_sidebar_state="expanded",
-        )
 
     def display_messages(self, prompt: str):
         """Display user and assistant messages"""
@@ -177,6 +267,15 @@ class StreamlitChatBot:
         if prompt := st.chat_input("Ask about government policies..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             self.display_messages(prompt)
+
+    def set_page_config(self):
+        """Set the Streamlit page configuration"""
+        st.set_page_config(
+            page_title=f"{Defaults.APP_NAME}",
+            page_icon="🏛️",
+            layout="wide",
+            initial_sidebar_state="expanded",
+        )
 
     def create_bot(self):
         """Create the chatbot app"""

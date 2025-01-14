@@ -39,6 +39,12 @@ class CortextEvaluator(BaseEvaluator):
             .aggregate(np.mean)
         )
 
+    def get_cost_feedback(self) -> Any:
+        return Feedback(
+            self.get_feedback_provider().cost_estimate,
+            name="Cost"
+        ).on_output()
+
     def get_feedback_provider(self) -> Any:
         return Cortex(session.snowpark_session)
 
@@ -54,6 +60,6 @@ class CortextEvaluator(BaseEvaluator):
             feedbacks=[
                 self.get_groundedness_feedback(),
                 self.get_answer_relevance(),
-                self.get_context_relevance(),
-            ],
+                self.get_context_relevance()
+            ]
         )

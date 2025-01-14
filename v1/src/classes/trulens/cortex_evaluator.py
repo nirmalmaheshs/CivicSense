@@ -7,7 +7,7 @@ from typing import Any
 from src.utils.session import session
 from trulens.apps.custom import TruCustomApp
 from src.classes.base.base_rag import BaseRag
-
+from trulens.apps.custom import instrument
 
 class CortextEvaluator(BaseEvaluator):
 
@@ -43,6 +43,10 @@ class CortextEvaluator(BaseEvaluator):
         return Cortex(session.snowpark_session)
 
     def get_evaluator(self, rag: BaseRag, app_name: str, app_version: str) -> Any:
+        instrument.method(BaseRag, BaseRag.generate_completion.__name__)
+        instrument.method(BaseRag, BaseRag.query.__name__)
+        instrument.method(BaseRag, BaseRag.retrieve_context.__name__)
+
         return TruCustomApp(
             app=rag,
             app_name=app_name,

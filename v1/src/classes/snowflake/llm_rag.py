@@ -2,7 +2,6 @@ from src.classes.base.base_rag import BaseRag
 from src.classes.snowflake.cortex_search_retriever import CortexSearchRetriever
 from src.utils.session import session
 from snowflake.cortex import complete
-from trulens.apps.custom import instrument
 
 class Predictor(BaseRag):
 
@@ -11,14 +10,12 @@ class Predictor(BaseRag):
             snowpark_session=session.snowpark_session, limit_to_retrieve=4
         )
 
-    @instrument
     def retrieve_context(self, query: str) -> list:
         """
         Retrieve relevant text from vector store.
         """
         return self.retriever.retrieve(query)
 
-    @instrument
     def generate_completion(self, query: str, context_str: list) -> str:
         """
         Generate answer from context.
@@ -34,7 +31,6 @@ class Predictor(BaseRag):
         """
         return complete("mistral-large", prompt, session=session.snowpark_session)
 
-    @instrument
     def query(self, query: str) -> str:
         context_str = self.retrieve_context(query)
         return self.generate_completion(query, context_str)

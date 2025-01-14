@@ -21,10 +21,14 @@ def get_cost_metrics():
         SELECT 
             DATE_TRUNC('hour', TO_TIMESTAMP_NTZ(TS::int)) as TIME,
             COUNT(*) as QUERY_COUNT,
-            COALESCE(AVG(PARSE_JSON(COST_JSON):tokens::float), 0) as TOKENS,
-            COALESCE(SUM(PARSE_JSON(COST_JSON):cost::float), 0) as COST
+            SUM(PARSE_JSON(COST_JSON):n_tokens::number) as TOKENS,
+            SUM(PARSE_JSON(COST_JSON):n_prompt_tokens::number) as PROMPT_TOKENS,
+            SUM(PARSE_JSON(COST_JSON):n_completion_tokens::number) as COMPLETION_TOKENS,
+            SUM(PARSE_JSON(COST_JSON):cost::number) as COST,
+            MAX(PARSE_JSON(COST_JSON):cost_currency::string) as CURRENCY
         FROM TRULENS_RECORDS
         WHERE COST_JSON IS NOT NULL
+            AND PARSE_JSON(COST_JSON):cost IS NOT NULL
         GROUP BY DATE_TRUNC('hour', TO_TIMESTAMP_NTZ(TS::int))
         ORDER BY TIME
     """

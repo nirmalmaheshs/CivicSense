@@ -66,7 +66,7 @@ class StreamlitChatBot:
 
             with col3:
                 try:
-                    groundedness = feedback_df[feedback_df['name'] == 'Groundedness']['avg_score'].iloc[0]
+                    groundedness = feedback_df[feedback_df['NAME'] == 'Groundedness']['AVG_SCORE'].iloc[0]
                     groundedness_display = f"{groundedness:.1%}"
                 except (KeyError, IndexError):
                     groundedness_display = "N/A"
@@ -74,7 +74,7 @@ class StreamlitChatBot:
 
             with col4:
                 try:
-                    relevance = feedback_df[feedback_df['name'] == 'Context Relevance']['avg_score'].iloc[0]
+                    relevance = feedback_df[feedback_df['NAME'] == 'Context Relevance']['AVG_SCORE'].iloc[0]
                     relevance_display = f"{relevance:.1%}"
                 except (KeyError, IndexError):
                     relevance_display = "N/A"
@@ -145,12 +145,23 @@ class StreamlitChatBot:
         try:
             cost_df = get_cost_metrics()
 
-            # Format the dataframe safely handling None values
+            # Format the dataframe for display
             display_df = cost_df.copy()
-            display_df['COST'] = display_df['COST'].apply(lambda x: f"${x:.2f}" if pd.notnull(x) else "N/A")
-            display_df['TOKENS'] = display_df['TOKENS'].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A")
+            display_df['COST'] = display_df.apply(
+                lambda x: f"${x['COST']:.4f} {x['CURRENCY']}" if pd.notnull(x['COST']) else "N/A",
+                axis=1
+            )
+            display_df['TOTAL_TOKENS'] = display_df['TOKENS'].apply(
+                lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A"
+            )
+            display_df['PROMPT_TOKENS'] = display_df['PROMPT_TOKENS'].apply(
+                lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A"
+            )
+            display_df['COMPLETION_TOKENS'] = display_df['COMPLETION_TOKENS'].apply(
+                lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A"
+            )
 
-            # Create visualization for cost metrics
+            # Cost over time visualization
             fig1 = px.line(
                 cost_df,
                 x='TIME',
@@ -158,21 +169,54 @@ class StreamlitChatBot:
                 title='Cost Over Time',
                 labels={
                     'TIME': 'Time',
-                    'COST': 'Cost ($)'
+                    'COST': f'Cost ({cost_df["CURRENCY"].iloc[0]})'
                 }
             )
             st.plotly_chart(fig1, use_container_width=True)
 
-            # Rest of your visualizations...
+            # Token usage breakdown
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(
+                name='Prompt Tokens',
+                x=cost_df['TIME'],
+                y=cost_df['PROMPT_TOKENS'],
+            ))
+            fig2.add_trace(go.Bar(
+                name='Completion Tokens',
+                x=cost_df['TIME'],
+                y=cost_df['COMPLETION_TOKENS'],
+            ))
+            fig2.update_layout(
+                barmode='stack',
+                title='Token Usage Breakdown Over Time',
+                xaxis_title='Time',
+                yaxis_title='Number of Tokens'
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
-            # Show detailed metrics table
+            # Query volume visualization
+            fig3 = px.line(
+                cost_df,
+                x='TIME',
+                y='QUERY_COUNT',
+                title='Query Volume Over Time',
+                labels={
+                    'TIME': 'Time',
+                    'QUERY_COUNT': 'Number of Queries'
+                }
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+            # Detailed metrics table
             st.markdown("### Detailed Metrics")
             st.dataframe(
                 display_df,
                 column_config={
                     "TIME": "Timestamp",
                     "COST": "Total Cost",
-                    "TOKENS": "Token Count",
+                    "TOTAL_TOKENS": "Total Tokens",
+                    "PROMPT_TOKENS": "Prompt Tokens",
+                    "COMPLETION_TOKENS": "Completion Tokens",
                     "QUERY_COUNT": "Number of Queries"
                 }
             )
@@ -281,7 +325,6 @@ class StreamlitChatBot:
         """Create the chatbot app"""
         self.set_page_config()
         page = self.create_sidebar()
-
         if page == "Chatbot":
             self.create_main_content()
             self.create_chat_interface()

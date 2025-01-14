@@ -1,0 +1,24 @@
+# Core dependencies
+snowflake-snowpark-python
+snowflake-ml-python
+snowflake.core
+streamlit
+trulens-eval
+
+# Data processing & visualization
+pandas
+plotly
+seaborn
+openpyxl
+
+# Utilities
+python-dotenv
+nest-asyncio
+llama-index
+styleframe
+
+
+trulens-core
+trulens-providers-cortex
+trulens-connectors-snowflake
+snowflake.core

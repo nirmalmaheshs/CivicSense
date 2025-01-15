@@ -46,18 +46,19 @@ class CortextEvaluator(BaseEvaluator):
     def get_feedback_provider(self) -> Any:
         return Cortex(session.snowpark_session)
 
-    def get_evaluator(self, rag: BaseRag, app_name: str, app_version: str) -> Any:
+    def get_evaluator(self, rag: BaseRag, llm_cofig:dict) -> Any:
         instrument.method(BaseRag, BaseRag.generate_completion.__name__)
         instrument.method(BaseRag, BaseRag.query.__name__)
         instrument.method(BaseRag, BaseRag.retrieve_context.__name__)
 
         return TruCustomApp(
             app=rag,
-            app_name=app_name,
-            app_version=app_version,
+            app_name=llm_cofig.get('app_name'),
+            app_version=llm_cofig.get('app_version'),
             feedbacks=[
                 self.get_groundedness_feedback(),
                 self.get_answer_relevance(),
                 self.get_context_relevance()
-            ]
+            ],
+            metadata=llm_cofig
         )

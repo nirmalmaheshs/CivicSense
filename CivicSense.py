@@ -1,6 +1,6 @@
 from src.classes.trulens.cortex_evaluator import CortextEvaluator
 from src.classes.snowflake.llm_rag import Predictor
-from src.utils.config import Defaults
+from src.utils.config import Defaults, load_llm_config
 from src.utils.chatbot import StreamlitChatBot
 import streamlit as st
 
@@ -13,11 +13,13 @@ def set_page_config():
         initial_sidebar_state="expanded",
     )
 
+
 def main():
-    set_page_config()  # Call this first
-    rag = Predictor()
+    set_page_config()
+    llm_config = load_llm_config()
+    rag = Predictor(chunk_size=llm_config['retriever_chunk_size'])
     evaluator = CortextEvaluator().get_evaluator(
-        rag, Defaults.APP_NAME, Defaults.APP_VERSION
+        rag, llm_config
     )
     chatbot = StreamlitChatBot(evaluator, rag)
     chatbot.create_bot()

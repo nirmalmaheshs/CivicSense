@@ -1,13 +1,11 @@
 from src.classes.base.base_evaluator import BaseEvaluator
 from trulens.providers.cortex.provider import Cortex
-from trulens.core import Feedback
-from trulens.core import Select
+from trulens.core import Feedback, Select
+from trulens.apps.custom import TruCustomApp, instrument
 import numpy as np
 from typing import Any
 from src.utils.session import session
-from trulens.apps.custom import TruCustomApp
 from src.classes.base.base_rag import BaseRag
-from trulens.apps.custom import instrument
 
 class CortextEvaluator(BaseEvaluator):
 

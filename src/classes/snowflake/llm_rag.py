@@ -6,9 +6,9 @@ from snowflake.cortex import complete
 
 class Predictor(BaseRag):
 
-    def __init__(self):
+    def __init__(self, chunk_size=Defaults.LLM_RETRIEVE_CHUNK_SIZE):
         self.retriever = CortexSearchRetriever(
-            snowpark_session=session.snowpark_session, limit_to_retrieve=4
+            snowpark_session=session.snowpark_session, limit_to_retrieve=chunk_size
         )
 
     def retrieve_context(self, query: str) -> list:
@@ -42,9 +42,5 @@ class Predictor(BaseRag):
         }
 
     def query(self, query: str) -> dict:
-        context_str = self.retrieve_context(query)
-        return self.generate_completion(query, context_str)
-
-    def query(self, query: str) -> str:
         context_str = self.retrieve_context(query)
         return self.generate_completion(query, context_str)

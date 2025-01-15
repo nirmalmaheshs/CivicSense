@@ -87,3 +87,40 @@ order by day desc
 limit 7
     """
     return pd.read_sql(query, session.snowflake_connector)
+
+# Add to queries.py
+def get_model_evaluation_metrics():
+    """Get metrics for model configuration comparison"""
+    query = """
+    SELECT 
+        r.APP_ID,
+        COUNT(*) as total_queries,
+        AVG(CASE WHEN name = 'Groundedness' THEN result END) as avg_groundedness,
+        AVG(CASE WHEN name = 'Context Relevance' THEN result END) as avg_context_relevance,
+        AVG(CASE WHEN name = 'Answer Relevance' THEN result END) as avg_answer_relevance,
+        AVG(
+            TIMESTAMPDIFF(
+                'MILLISECOND',
+                TO_TIMESTAMP(PARSE_JSON(r.RECORD_JSON):perf:start_time::string),
+                TO_TIMESTAMP(PARSE_JSON(r.RECORD_JSON):perf:end_time::string)
+            ) / 1000.0
+        ) as avg_latency,
+        AVG(PARSE_JSON(r.COST_JSON):cost::float) as avg_cost
+    FROM TRULENS_RECORDS r
+    LEFT JOIN TRULENS_FEEDBACKS f ON r.RECORD_ID = f.RECORD_ID
+    GROUP BY r.APP_ID
+    ORDER BY r.APP_ID
+    """
+    return pd.read_sql(query, session.snowflake_connector)
+
+def get_configuration_details():
+    """Get configuration details from TAGS"""
+    query = """
+    SELECT DISTINCT
+        APP_ID,
+        TAGS
+    FROM TRULENS_RECORDS
+    WHERE TAGS != '[]'
+    ORDER BY APP_ID
+    """
+    return pd.read_sql(query, session.snowflake_connector)

@@ -26,8 +26,12 @@ class StreamlitChatBot:
             st.image("src/images/logofull.png")
         st.markdown(
             """
-            Ask questions about government policies and benefits.
-            I'll provide accurate information with references to official documents.
+            👋 Welcome! I'm here to help you navigate government policies and benefits.
+            I can help you:
+            - 🔍 Find benefits and support programs you might be eligible for
+            - 📋 Understand application processes and requirements
+            - 📝 Navigate complex policy documents in simple terms
+            - 🔗 Get direct references to official sources
             """
         )
 

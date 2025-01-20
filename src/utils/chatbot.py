@@ -50,7 +50,7 @@ class StreamlitChatBot:
         with st.chat_message("assistant"):
             with st.spinner("Searching policy documents..."):
                 with self.evaluator as recording:
-                    response = self.rag.query(prompt)
+                    response = self.rag.query(prompt, st.session_state.messages)
 
                 # Display the main answer
                 st.markdown(response["answer"])

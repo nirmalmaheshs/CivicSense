@@ -11,3 +11,4 @@ __pycache__
 .streamlit/secrets.toml
 *.toml
 /.streamlit
+.env

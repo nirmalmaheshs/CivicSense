@@ -2,7 +2,9 @@
 snowflake-snowpark-python
 snowflake-ml-python
 snowflake.core
-streamlit~=1.41.1
+streamlit
+trulens-eval
+trulens-providers-cortex
 
 # Data processing & visualization
 pandas~=2.2.3

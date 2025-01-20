@@ -1,7 +1,14 @@
+.streamlit/secrets.toml
 .idea
 .idea/*
 .venv
-.streamlit
 default.sqlite
 __pycache__
+.env
+.streamlit/secrets.toml
+*.toml
+.devcontainer
+.streamlit/secrets.toml
+*.toml
+/.streamlit
 .env

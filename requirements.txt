@@ -7,13 +7,20 @@ trulens-eval
 trulens-providers-cortex
 
 # Data processing & visualization
-pandas
-plotly
+pandas~=2.2.3
+plotly~=5.24.1
 seaborn
 openpyxl
 
 # Utilities
-python-dotenv
+python-dotenv~=1.0.1
 nest-asyncio
 llama-index
 styleframe
+
+
+trulens-core
+trulens-providers-cortex
+trulens-connectors-snowflake
+snowflake.core
+numpy~=1.26.4

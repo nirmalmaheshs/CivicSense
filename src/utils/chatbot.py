@@ -20,7 +20,10 @@ class StreamlitChatBot:
 
     def create_main_content(self):
         """Create the main chatbot content"""
-        st.title(f"{Defaults.APP_NAME} 🏛️")
+        container = st.container()
+        container.markdown('<style>div[data-testid="stImage"] img {max-height: 50px; width: auto;}</style>', unsafe_allow_html=True)
+        with container:
+            st.image("src/images/logofull.png")
         st.markdown(
             """
             Ask questions about government policies and benefits.

@@ -6,9 +6,12 @@ import streamlit as st
 
 def set_page_config():
     """Set the Streamlit page configuration"""
+    with open("src/images/logo.svg", "r") as f:
+        svg_content = f.read()
+        
     st.set_page_config(
         page_title=f"{Defaults.APP_NAME}",
-        page_icon="🏛️",
+        page_icon=svg_content,
         layout="wide",
         initial_sidebar_state="expanded",
     )
